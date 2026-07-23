@@ -5,15 +5,8 @@
   import { link } from '../lib/router.svelte';
   import { toasts } from '../lib/toasts.svelte';
   import LabelFilterChips from '../components/LabelFilterChips.svelte';
-  import {
-    NODE_HEIGHT,
-    NODE_WIDTH,
-    computeGraph,
-    edgePath,
-    type GraphResult,
-    type LayoutEdge,
-    type LayoutPoint,
-  } from '../lib/graph';
+  import { edgePath, type GraphResult, type LayoutEdge, type LayoutPoint } from '../lib/graph';
+  import { NODE_HEIGHT, NODE_WIDTH, computeGraph } from '../lib/graph-layout';
 
   interface Props {
     projectId: string;

@@ -1,6 +1,6 @@
 import { fetchMock, jsonResponse } from '../api/testUtils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import Project from './Project.svelte';
 import { board } from '../lib/board.svelte';
 import { router } from '../lib/router.svelte';
@@ -96,7 +96,9 @@ describe('Project', () => {
     const { container } = render(Project, { props: { projectId, view: 'graph' } });
 
     expect(await screen.findByRole('heading', { name: 'Rulebook' })).toBeInTheDocument();
-    expect(container.querySelector('svg[aria-label="Dependency graph"]')).not.toBeNull();
+    await waitFor(() =>
+      expect(container.querySelector('svg[aria-label="Dependency graph"]')).not.toBeNull()
+    );
     expect(screen.queryByRole('button', { name: '+ Add column' })).not.toBeInTheDocument();
   });
 
@@ -126,7 +128,9 @@ describe('Project', () => {
     });
 
     expect(await screen.findByLabelText('Task title')).toHaveValue('Design cards');
-    expect(container.querySelector('svg[aria-label="Dependency graph"]')).not.toBeNull();
+    await waitFor(() =>
+      expect(container.querySelector('svg[aria-label="Dependency graph"]')).not.toBeNull()
+    );
     expect(container.querySelector('dialog')).not.toBeNull();
   });
 

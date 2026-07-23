@@ -12,7 +12,6 @@
   import Button from '../components/ui/Button.svelte';
   import Spinner from '../components/ui/Spinner.svelte';
   import Board from './Board.svelte';
-  import Graph from './Graph.svelte';
 
   interface Props {
     projectId: string;
@@ -66,7 +65,19 @@
     {#if view === 'board'}
       <Board {projectId} />
     {:else}
-      <Graph {projectId} />
+      {#await import('./Graph.svelte')}
+        <div class="flex min-h-0 flex-1 items-center justify-center">
+          <Spinner size="lg" />
+        </div>
+      {:then { default: Graph }}
+        <Graph {projectId} />
+      {:catch}
+        <div class="flex min-h-0 flex-1 items-center justify-center p-6 text-center">
+          <p class="max-w-sm text-sm text-muted">
+            The graph view failed to load. Check your connection and try again.
+          </p>
+        </div>
+      {/await}
     {/if}
   </div>
   {#if taskId !== undefined}
