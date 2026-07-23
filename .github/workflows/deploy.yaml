@@ -34,29 +34,32 @@ jobs:
           service_account: 'github-actions-service@realm-construction.iam.gserviceaccount.com'
 
       - uses: 'google-github-actions/setup-gcloud@v3'
-
-      - name: 'Upload site'
-        uses: 'google-github-actions/upload-cloud-storage@v3'
         with:
-          path: 'dist'
-          destination: '${{ env.BUCKET }}'
-          parent: false
-          process_gcloudignore: false
+          cache: true
 
       # `gcloud storage` rather than `gsutil`: gsutil cannot consume the
       # workload-identity-federation credentials set up by auth@v3.
-      - name: 'Set cache headers'
+      # Hashed assets first, then the entry points that reference them, so a
+      # half-finished deploy never serves an index.html pointing at missing files.
+      - name: 'Upload site'
         run: |
-          gcloud storage objects update --recursive \
-            --cache-control='public, max-age=31536000, immutable' \
-            "gs://$BUCKET/assets"
-          gcloud storage objects update \
-            --cache-control='public, max-age=31536000, immutable' \
-            "gs://$BUCKET/workbox-*.js"
-          gcloud storage objects update \
-            --cache-control='no-cache, no-store, must-revalidate' \
-            "gs://$BUCKET/index.html" "gs://$BUCKET/sw.js"
-          gcloud storage objects update \
-            --cache-control='no-cache, no-store, must-revalidate' \
+          immutable='public, max-age=31536000, immutable'
+          nocache='no-cache, no-store, must-revalidate'
+          pids=()
+          gcloud storage cp --recursive --gzip-local-all \
+            --cache-control="$immutable" \
+            dist/assets "gs://$BUCKET" & pids+=($!)
+          gcloud storage cp --gzip-local-all \
+            --cache-control="$immutable" \
+            dist/workbox-*.js "gs://$BUCKET/" & pids+=($!)
+          gcloud storage cp dist/*.png dist/favicon.svg "gs://$BUCKET/" & pids+=($!)
+          for pid in "${pids[@]}"; do wait "$pid"; done
+          pids=()
+          gcloud storage cp --gzip-local-all \
+            --cache-control="$nocache" \
+            dist/index.html dist/sw.js "gs://$BUCKET/" & pids+=($!)
+          gcloud storage cp --gzip-local-all \
+            --cache-control="$nocache" \
             --content-type='application/manifest+json' \
-            "gs://$BUCKET/manifest.webmanifest"
+            dist/manifest.webmanifest "gs://$BUCKET/" & pids+=($!)
+          for pid in "${pids[@]}"; do wait "$pid"; done

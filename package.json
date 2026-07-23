@@ -9,6 +9,13 @@
   "overrides": {
     "openapi-typescript": {
       "typescript": "$typescript"
+    },
+    "workbox-build": {
+      "glob": "^13.0.6"
+    },
+    "source-map@^0.8.0-beta.0": "0.7.6",
+    "@redocly/openapi-core": {
+      "js-yaml": "4.3.0"
     }
   },
   "scripts": {

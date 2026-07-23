@@ -6,7 +6,6 @@
   import AssigneePicker from './AssigneePicker.svelte';
   import DependencyPicker from './DependencyPicker.svelte';
   import LabelPicker from './LabelPicker.svelte';
-  import RichTextEditor from './RichTextEditor.svelte';
   import Badge from './ui/Badge.svelte';
   import Button from './ui/Button.svelte';
   import Spinner from './ui/Spinner.svelte';
@@ -144,7 +143,17 @@
       <section class="flex flex-col gap-2">
         <h3 class="text-sm font-semibold text-muted">Description</h3>
         {#key taskId}
-          <RichTextEditor content={task.description} onSave={saveDescription} {uploadImage} />
+          {#await import('./RichTextEditor.svelte')}
+            <div
+              class="flex min-h-39 items-center justify-center rounded-md border border-edge bg-canvas"
+            >
+              <Spinner size="sm" label="Loading editor" />
+            </div>
+          {:then { default: RichTextEditor }}
+            <RichTextEditor content={task.description} onSave={saveDescription} {uploadImage} />
+          {:catch}
+            <p class="text-sm text-muted">The editor failed to load. Check your connection.</p>
+          {/await}
         {/key}
       </section>
 

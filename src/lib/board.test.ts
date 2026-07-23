@@ -2,7 +2,7 @@ import { fetchMock, jsonResponse, requestAt } from '../api/testUtils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { board, positionAfterDrop } from './board.svelte';
 import type { BoardPayload } from './board-types';
-import { computeGraph } from './graph';
+import { computeGraph } from './graph-layout';
 import { toasts } from './toasts.svelte';
 
 function task(id: string, columnId: string, position: number, title: string) {
