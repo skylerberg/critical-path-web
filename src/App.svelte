@@ -52,31 +52,37 @@
 </script>
 
 {#if session.status === 'unknown'}
-  <div class="flex min-h-dvh items-center justify-center">
+  <div class="flex h-full items-center justify-center">
     <Spinner size="lg" />
   </div>
 {:else}
-  {#if showNav}
-    <Nav />
-  {/if}
-  <div class={showNav ? 'pb-16 lg:pb-0 lg:pl-56' : ''}>
-    {#if route.name === 'login'}
-      <Login />
-    {:else if route.name === 'signup'}
-      <Signup />
-    {:else if route.name === 'forgot-password'}
-      <ForgotPassword />
-    {:else if route.name === 'reset-password'}
-      <ResetPassword token={route.params.token} />
-    {:else if route.name === 'account'}
-      <Account />
-    {:else if route.name === 'projects'}
-      <Projects />
-    {:else if route.name === 'project'}
-      <Project projectId={route.params.id} view={route.params.view} taskId={route.params.taskId} />
-    {:else}
-      <NotFound path={route.path} />
+  <div class={showNav ? 'flex h-full flex-col lg:block lg:h-auto lg:pl-56' : 'h-full'}>
+    {#if showNav}
+      <Nav />
     {/if}
+    <div class={showNav ? 'min-h-0 flex-1 overflow-y-auto lg:overflow-visible' : 'h-full'}>
+      {#if route.name === 'login'}
+        <Login />
+      {:else if route.name === 'signup'}
+        <Signup />
+      {:else if route.name === 'forgot-password'}
+        <ForgotPassword />
+      {:else if route.name === 'reset-password'}
+        <ResetPassword token={route.params.token} />
+      {:else if route.name === 'account'}
+        <Account />
+      {:else if route.name === 'projects'}
+        <Projects />
+      {:else if route.name === 'project'}
+        <Project
+          projectId={route.params.id}
+          view={route.params.view}
+          taskId={route.params.taskId}
+        />
+      {:else}
+        <NotFound path={route.path} />
+      {/if}
+    </div>
   </div>
 {/if}
 

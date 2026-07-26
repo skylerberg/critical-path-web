@@ -50,4 +50,14 @@
     color: var(--cp-ink);
     -webkit-font-smoothing: antialiased;
   }
+
+  /* Percentages resolve against the initial containing block, which is the always-visible
+     area on mobile; viewport units resolve against a taller, toolbar-inclusive box on
+     Firefox Android, which leaves the document scrollable and pushes the bottom bar under
+     the browser chrome. Sizing the shell in dvh/svh/vh reintroduces that bug. */
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
 }

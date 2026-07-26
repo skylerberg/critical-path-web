@@ -375,3 +375,45 @@ describe('Project', () => {
     expect(within(menu).getByLabelText('Search tasks this one blocks')).toHaveFocus();
   });
 });
+
+describe('Project sizing', () => {
+  it('sizes the ready branch from the shell rather than the viewport', async () => {
+    const projectId = 'p-sizing-ready';
+    mockProjectApi(projectId, [task('t1', 'todo', 'Design cards')]);
+
+    render(Project, { props: { projectId, view: 'board' } });
+
+    const ready = (await screen.findByRole('heading', { name: 'Rulebook' })).closest(
+      'header'
+    )!.parentElement!;
+    expect(ready).toHaveClass('flex', 'h-full', 'flex-col', 'lg:h-dvh');
+    expect(ready.className).not.toContain('calc(100dvh');
+  });
+
+  it('sizes the error branch from the shell rather than the viewport', async () => {
+    fetchMock.mockImplementation(async () => jsonResponse(503, { error: 'down' }));
+
+    render(Project, { props: { projectId: 'p-sizing-error', view: 'board' } });
+
+    const error = (await screen.findByRole('button', { name: 'Try again' })).parentElement!;
+    expect(error).toHaveClass('flex', 'h-full', 'flex-col', 'lg:h-dvh');
+    expect(error.className).not.toContain('calc(100dvh');
+  });
+
+  it('sizes the loading branch from the shell rather than the viewport', () => {
+    fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+
+    const { container } = render(Project, {
+      props: { projectId: 'p-sizing-loading', view: 'board' },
+    });
+
+    expect(container.firstElementChild!).toHaveClass(
+      'flex',
+      'h-full',
+      'items-center',
+      'justify-center',
+      'lg:h-dvh'
+    );
+    expect(container.firstElementChild!.className).not.toContain('calc(100dvh');
+  });
+});

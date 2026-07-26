@@ -207,7 +207,7 @@
 <nav
   aria-label="Primary"
   use:link
-  class="fixed inset-x-0 bottom-0 z-20 flex items-stretch border-t border-edge bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
+  class="order-last flex shrink-0 items-stretch border-t border-edge bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
 >
   <a
     href="/"

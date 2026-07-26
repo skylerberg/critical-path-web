@@ -1,6 +1,6 @@
 import { fetchMock, jsonResponse, requestAt } from '../api/testUtils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { SOURCES, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
 import Nav from './Nav.svelte';
 import { projects, type Project } from '../lib/projects.svelte';
@@ -219,6 +219,32 @@ describe('Nav sidebar', () => {
 
     expect(document.querySelector('dialog')?.open).toBe(true);
     expect(screen.getByLabelText('Feedback message')).toBeInTheDocument();
+  });
+});
+
+describe('Nav bottom bar', () => {
+  function bar(): HTMLElement {
+    const navs = [...document.querySelectorAll<HTMLElement>('nav[aria-label="Primary"]')];
+    return navs.find((nav) => nav.className.includes('lg:hidden'))!;
+  }
+
+  it('keeps the mobile bar in normal flow so browser chrome cannot cover it', () => {
+    render(Nav);
+
+    expect(bar()).toHaveClass('order-last', 'shrink-0', 'pb-[env(safe-area-inset-bottom)]');
+    expect(bar()).not.toHaveClass('fixed');
+    expect(bar()).not.toHaveClass('bottom-0');
+  });
+
+  it('still exposes Projects, the account link, and Log out in the mobile bar', () => {
+    render(Nav);
+
+    const scoped = within(bar());
+    expect(scoped.getByRole('link', { name: /Projects/ })).toHaveAttribute('href', '/');
+    expect(scoped.getAllByRole('link').some((a) => a.getAttribute('href') === '/account')).toBe(
+      true
+    );
+    expect(scoped.getByRole('button', { name: 'Log out' })).toBeInTheDocument();
   });
 });
 
