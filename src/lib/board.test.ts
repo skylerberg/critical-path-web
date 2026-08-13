@@ -5,6 +5,7 @@ import { noFilters, parseFilters } from './board-filters';
 import type { BoardPayload } from './board-types';
 import { computeGraph } from './graph';
 import { clearOfflineCache } from './offline-cache';
+import { connectivity } from './connectivity.svelte';
 import { outbox } from './outbox.svelte';
 import { realtimeCoverage } from './realtime-coverage.svelte';
 import { router } from './router.svelte';
@@ -1325,6 +1326,22 @@ describe('board store mutations', () => {
     const url = new URL(requestAt(0).url);
     expect(url.pathname).toBe('/api/columns/c3');
     expect(url.searchParams.has('move_tasks_to')).toBe(false);
+  });
+
+  // The label is built after the optimistic drop, so it has to capture the name
+  // before the column leaves this.columns — otherwise the unsynced-changes panel
+  // shows "Deleted column \u201c\u201d" for every column deleted offline.
+  it('deleteColumn labels the queued op with the column name', async () => {
+    connectivity.reachable = false;
+    try {
+      await board.deleteColumn('c2');
+
+      expect(outbox.pending).toHaveLength(1);
+      expect(outbox.pending[0]?.label).toBe('Deleted column “Done”');
+    } finally {
+      outbox.reset();
+      connectivity.reachable = true;
+    }
   });
 
   it('setTaskLabels applies optimistically and PUTs the full set', async () => {

@@ -350,4 +350,38 @@ describe('buildGraph cross-project placeholders', () => {
     const { nodes, edges } = buildGraph([crossTask('a', 1), crossTask('b', 1)], columns);
     expect(detectCycle(nodes, edges)).toBe(false);
   });
+
+  // One upstream task blocking two local tasks is an ordinary shape, and the
+  // graph keeps several expansions open at once — so a remote task_id shared by
+  // two hosts has to collapse to one node. Pushing it once per host emits
+  // duplicate node ids, which Graph.svelte's keyed {#each} reconciles as
+  // each_key_duplicate.
+  it('emits one remote node for a task that blocks several hosts', () => {
+    const { nodes, edges } = buildGraph([crossTask('a', 1), crossTask('b', 1)], columns, {
+      expanded: new Set(['a', 'b']),
+      loaded: new Map([
+        [
+          'a',
+          {
+            tasks: [{ task_id: 'far', title: 'Sign off', project_name: 'Design', is_done: false }],
+            hiddenCount: 0,
+          },
+        ],
+        [
+          'b',
+          {
+            tasks: [{ task_id: 'far', title: 'Sign off', project_name: 'Design', is_done: false }],
+            hiddenCount: 0,
+          },
+        ],
+      ]),
+    });
+
+    const remoteIds = nodes.filter((n) => n.kind === 'remote').map((n) => n.id);
+    expect(remoteIds).toEqual(['far']);
+    expect(edges).toEqual([
+      { id: 'far->a', from: 'far', to: 'a' },
+      { id: 'far->b', from: 'far', to: 'b' },
+    ]);
+  });
 });

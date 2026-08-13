@@ -5,8 +5,10 @@ import { tick } from 'svelte';
 import App from './App.svelte';
 import { announcer } from './lib/announcer.svelte';
 import { board } from './lib/board.svelte';
+import { connectivity } from './lib/connectivity.svelte';
 import { invitations } from './lib/invitations.svelte';
 import { myTasks } from './lib/myTasks.svelte';
+import { outbox } from './lib/outbox.svelte';
 import { projects } from './lib/projects.svelte';
 import { realtime } from './lib/realtime.svelte';
 import { router } from './lib/router.svelte';
@@ -102,6 +104,8 @@ beforeEach(() => {
   realtime.disconnect();
   announcer.clear();
   board.reset();
+  connectivity.resetForTests();
+  outbox.reset();
   invitations.reset();
   myTasks.reset();
   projects.reset();
@@ -237,6 +241,40 @@ describe('App chrome', () => {
     expect(invitations.currentProjectId).toBeNull();
     expect(invitations.loaded).toBe(false);
     expect(projects.projects).toEqual([]);
+  });
+
+  // The outbox is per-account: its in-memory queue would otherwise drain under
+  // the next account's token, its issues would render this one's card titles to
+  // them, and a latched #hydrated would skip the next account's own queued work.
+  it('clears the outbox when the session ends', async () => {
+    localStorage.setItem('cp.token', 'token');
+    router.navigate('/my-tasks', { replace: true });
+
+    render(App);
+    await screen.findByRole('heading', { name: 'My tasks' });
+
+    connectivity.reachable = false;
+    await outbox.submit({
+      projectId: PROJECT_ID,
+      entityId: TASK_ID,
+      label: 'Renamed a card',
+      request: {
+        method: 'PATCH',
+        path: '/api/tasks/{id}',
+        pathParams: { id: TASK_ID },
+        body: { title: 'sneaked under the next account' },
+      },
+    });
+    expect(outbox.count).toBe(1);
+
+    // Ending the session offline keeps a returning-network drain from racing the
+    // teardown this is asserting.
+    localStorage.removeItem('cp.token');
+    await session.init();
+
+    await vi.waitFor(() => expect(outbox.count).toBe(0));
+    expect(outbox.issues).toEqual([]);
+    connectivity.reachable = true;
   });
 
   // Both moves used to re-run the shell's bootstrap: the promotion because the

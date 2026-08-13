@@ -1181,6 +1181,9 @@ class BoardStore {
   // The server relocates every row in the column, archived ones included, so
   // leaving them behind would strand them on a column id the board no longer has.
   async deleteColumn(columnId: string, moveTasksTo?: string): Promise<void> {
+    // Captured before the drop below: nothing else holds the row afterwards, and
+    // the queued-op label is what the unsynced-changes panel shows for the move.
+    const name = this.columns.find((column) => column.id === columnId)?.name ?? '';
     const movedLive = this.tasksInColumn(columnId);
     const movedArchived = this.archivedTasks.filter((task) => task.column_id === columnId);
     this.columns = this.columns.filter((column) => column.id !== columnId);
@@ -1201,7 +1204,6 @@ class BoardStore {
       this.tasks = this.tasks.filter((task) => task.column_id !== columnId);
       this.archivedTasks = this.archivedTasks.filter((task) => task.column_id !== columnId);
     }
-    const name = this.columns.find((column) => column.id === columnId)?.name ?? '';
     const result = await this.#sendOrFail<MovedTasksResponse | undefined>({
       entityId: columnId,
       label: `Deleted column “${truncateTitle(name)}”`,

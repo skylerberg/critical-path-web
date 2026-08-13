@@ -143,9 +143,14 @@ export function buildGraph(
     }
   }
 
-  // Every synthetic node has in-degree 0 and out-degree 1, so none can sit on a
-  // cycle and the cycle code needs no special case. In LR order they land
-  // immediately left of their host, which is where blockers belong.
+  // Synthetic nodes (placeholder/hidden) have in-degree 0 and out-degree 1, so
+  // none can sit on a cycle and the cycle code needs no special case. In LR
+  // order they land immediately left of their host, which is where blockers
+  // belong. A remote node is keyed by its own task id rather than its host's, so
+  // one upstream task blocking several local tasks is one node with an edge to
+  // each of them — and pushing it once per host would emit duplicate node ids,
+  // which the keyed {#each} in Graph.svelte reconciles as each_key_duplicate.
+  const remoteById = new Map<string, RemoteGraphNode>();
   for (const task of tasks) {
     const count = task.open_cross_project_blocker_count;
     if (count === 0) continue;
@@ -157,7 +162,9 @@ export function buildGraph(
       continue;
     }
     for (const remote of loaded.tasks) {
-      nodes.push({
+      // First host to expand a remote task wins; a later expansion that fetched a
+      // fresher title takes it on the next refresh, never mid-render.
+      remoteById.set(remote.task_id, {
         kind: 'remote',
         id: remote.task_id,
         title: remote.title,
@@ -172,6 +179,7 @@ export function buildGraph(
       edges.push({ id: edgeId(id, task.id), from: id, to: task.id });
     }
   }
+  nodes.push(...remoteById.values());
 
   return { nodes, edges };
 }

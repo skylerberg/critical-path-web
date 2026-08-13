@@ -91,6 +91,11 @@
   $effect(() => {
     if (session.status === 'anon') {
       // Per-account caches must not survive into the next session in this tab.
+      // The outbox is one of them: its in-memory #ops and #issues would otherwise
+      // drain under the next account's token and render this one's card titles to
+      // them, and a latched #hydrated would skip their own queued work. The
+      // durable rows are wiped separately by session.#clear via clearOfflineCache.
+      outbox.reset();
       users.reset();
       board.reset();
       boardAnnouncer.reset();

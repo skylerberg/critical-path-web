@@ -399,6 +399,38 @@ describe('replaying a move made offline', () => {
     // Adjusted, not failed: the move did land.
     expect(outbox.count).toBe(0);
   });
+
+  // The slot-race 409 retries once. The server's resolveSortKey re-ranks on
+  // every PATCH, so the identical retry request lands at a server-adjusted key —
+  // the move is not lost. The adjusted-placement notice is raised inside #rekey,
+  // which runs again on the retry against the same cached board, so it has to fire
+  // once rather than once per round trip.
+  it('lands a position-409 on retry and reports the adjusted placement once', async () => {
+    await queueMove();
+    let patchCalls = 0;
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const request = input as Request;
+      if (request.method === 'GET') {
+        return Promise.resolve(
+          jsonResponse(200, boardWith([{ id: testUuid('unrelated'), sort_key: 'V3' }]))
+        );
+      }
+      patchCalls += 1;
+      return Promise.resolve(
+        patchCalls === 1
+          ? jsonResponse(409, { error: 'That position was taken while the move was in flight' })
+          : jsonResponse(200, {})
+      );
+    });
+
+    await outbox.drain();
+
+    expect(patchCalls).toBe(2);
+    expect(outbox.count).toBe(0);
+    expect(outbox.issues.filter((issue) => issue.reason === 'approximate-placement')).toHaveLength(
+      1
+    );
+  });
 });
 
 describe('two offline edits to the same card', () => {

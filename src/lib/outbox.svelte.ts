@@ -444,7 +444,10 @@ class OutboxStore {
       afterId: move.afterId,
       beforeId: move.beforeId,
     });
-    if (!exact) {
+    // The slot was taken: a position-409 retries this whole op, and this method
+    // runs again against the same cached board, so gating on the first attempt is
+    // what reports the adjusted placement once rather than once per round trip.
+    if (!exact && op.attempts === 0) {
       this.#raise(op, {
         reason: 'approximate-placement',
         severity: 'adjusted',
