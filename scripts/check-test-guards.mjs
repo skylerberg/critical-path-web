@@ -186,8 +186,8 @@ const children = new Set();
  * `pnpm exec` forwards nothing to the vitest it spawned, and vitest's own workers
  * are another generation below that, so the only thing that reliably ends a run is
  * the process group `detached` gave the child. `pnpm exec` puts one more process
- * between the runner and vitest than `npx` did, which the group signal covers and
- * a signal to the direct child would not.
+ * between the runner and vitest than the npm-era runner did, which the group signal
+ * covers and a signal to the direct child would not.
  *
  * @param {import('node:child_process').ChildProcess} child
  * @param {NodeJS.Signals} signal

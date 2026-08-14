@@ -6,7 +6,7 @@ TypeScript strict.
 ## Package manager
 
 pnpm, pinned by `packageManager` in package.json. pnpm honours that pin by
-downloading the named version when the one on `PATH` differs, so the pin decides
+downloading the named version when the installed one differs, so the pin decides
 which pnpm runs and Homebrew only decides what is there to start with.
 
 `pnpm-workspace.yaml` is where settings live, and it is a settings file here
@@ -118,7 +118,7 @@ and the only thing it produced was the misleading diff in between.
 
 ## Checks
 
-**While working, run only the tests your change touches** — `pnpm test --
+**While working, run only the tests your change touches** — `pnpm test
 <path>` on a file or directory takes seconds. The full suite is minutes, CI
 runs it on every push, and re-running it after every edit is most of the
 wall-clock in a long session for almost no extra signal. Reach for the whole

@@ -191,6 +191,11 @@ const EXTERNAL = new Set([
   'clientsClaim',
   'scrollY', // a browser global, named where the docs describe what focus does to it
   'props_duplicate', // svelte's own compile-error code
+  'allowBuilds', // pnpm settings, which live in pnpm-workspace.yaml rather than in src/
+  'strictDepBuilds',
+  'minimumReleaseAge',
+  'verifyDepsBeforeRun',
+  'packageManager', // a package.json field
 ]);
 
 export function findBadReferences(files, index) {
