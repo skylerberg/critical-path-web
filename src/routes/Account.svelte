@@ -7,6 +7,7 @@
   import { projectHref } from '../lib/short-links';
   import { session } from '../lib/session.svelte';
   import { users } from '../lib/users.svelte';
+  import AvatarCropper from '../components/AvatarCropper.svelte';
   import DeleteAccountDialog from '../components/DeleteAccountDialog.svelte';
   import FeedbackDialog from '../components/FeedbackDialog.svelte';
   import NotificationSettings from '../components/NotificationSettings.svelte';
@@ -26,6 +27,7 @@
   let avatarInput = $state<HTMLInputElement | null>(null);
   let avatarStatus = $state<Status>(null);
   let savingAvatar = $state(false);
+  let cropping = $state<File | null>(null);
 
   let email = $state(session.user?.email ?? '');
   let emailStatus = $state<Status>(null);
@@ -73,17 +75,31 @@
     }
   }
 
-  async function uploadAvatar(event: Event): Promise<void> {
+  function chooseAvatar(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
+    // Cleared before the cropper opens, so cancelling and picking the same file
+    // again still fires a change event.
     input.value = '';
     if (file === undefined) {
+      return;
+    }
+    if (!AVATAR_TYPES.includes(file.type)) {
+      avatarStatus = {
+        kind: 'error',
+        message: 'That file is not a supported image (PNG, JPEG, GIF, or WebP)',
+      };
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
       avatarStatus = { kind: 'error', message: 'That image is too large (max 10 MB).' };
       return;
     }
+    avatarStatus = null;
+    cropping = file;
+  }
+
+  async function uploadAvatar(file: File): Promise<void> {
     savingAvatar = true;
     avatarStatus = null;
     try {
@@ -99,8 +115,11 @@
       );
       session.user = user;
       users.upsert(user);
+      cropping = null;
       avatarStatus = { kind: 'success', message: 'Profile image updated' };
     } catch (error) {
+      // The cropper stays open on failure: the adjustment survives a retry, and
+      // closing it would make the error look like it came from the file picker.
       avatarStatus = { kind: 'error', message: avatarMessageFor(error) };
     } finally {
       savingAvatar = false;
@@ -121,6 +140,8 @@
       savingAvatar = false;
     }
   }
+
+  const AVATAR_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
   function avatarMessageFor(error: unknown): string {
     if (error instanceof ApiError && error.status === 413) {
@@ -267,14 +288,16 @@
         {/if}
       </div>
     </div>
-    {@render status(avatarStatus)}
+    <!-- The cropper repeats this while it is open, because a modal dialog covers
+         the page — so showing it here as well would be one message twice. -->
+    {@render status(cropping === null ? avatarStatus : null)}
     <input
       bind:this={avatarInput}
       type="file"
       accept="image/png,image/jpeg,image/gif,image/webp"
       aria-label="Profile image file"
       class="hidden"
-      onchange={uploadAvatar}
+      onchange={chooseAvatar}
     />
   </section>
 
@@ -434,6 +457,19 @@
     </div>
   </section>
 </div>
+
+<!-- A modal <dialog> sits in the top layer, so the page's own status line is
+     covered while it is open — the upload's error has to be handed back in. -->
+<AvatarCropper
+  file={cropping}
+  saving={savingAvatar}
+  error={avatarStatus?.kind === 'error' ? avatarStatus.message : null}
+  onsave={uploadAvatar}
+  oncancel={() => {
+    cropping = null;
+    avatarStatus = null;
+  }}
+/>
 
 <FeedbackDialog open={feedbackOpen} onclose={() => (feedbackOpen = false)} />
 <DeleteAccountDialog open={deleteOpen} onclose={() => (deleteOpen = false)} />

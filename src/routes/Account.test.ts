@@ -130,6 +130,43 @@ function seedProject(overrides: Partial<Project>): void {
   ];
 }
 
+async function chooseImage(
+  file = new File(['png-bytes'], 'me.png', { type: 'image/png' })
+): Promise<void> {
+  await fireEvent.change(screen.getByLabelText('Profile image file'), {
+    target: { files: [file] },
+  });
+}
+
+function cropper(): HTMLElement {
+  return screen.getByRole('dialog', { name: 'Adjust your image' });
+}
+
+/**
+ * Stands in for the two things jsdom has no version of: an image with a size,
+ * and a canvas that encodes one. The crop geometry has its own tests; this is
+ * only about which bytes leave the page.
+ */
+async function cropAndSave(): Promise<void> {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    save: () => {},
+    restore: () => {},
+    scale: () => {},
+    translate: () => {},
+    rotate: () => {},
+    drawImage: () => {},
+  } as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+    callback(new Blob(['cropped-bytes'], { type: 'image/webp' }));
+  });
+  const image = cropper().querySelector('img');
+  if (image === null) throw new Error('the cropper is showing no image');
+  Object.defineProperty(image, 'naturalWidth', { value: 400, configurable: true });
+  Object.defineProperty(image, 'naturalHeight', { value: 300, configurable: true });
+  await fireEvent.load(image);
+  await fireEvent.click(within(cropper()).getByRole('button', { name: 'Save' }));
+}
+
 beforeEach(async () => {
   fetchMock.mockReset();
   vi.mocked(realtime.connect).mockClear();
@@ -352,7 +389,17 @@ describe('Account', () => {
     ]);
   });
 
-  it('uploads a profile image and updates the session and users store', async () => {
+  it('opens the cropper on a chosen file rather than uploading it as it came', async () => {
+    mockRoutes(200, { ...user, avatar_url: '/api/avatars/key-1' });
+    render(Account);
+
+    await chooseImage();
+
+    expect(screen.getByRole('group', { name: 'Crop area' })).toBeInTheDocument();
+    expect(pathsRequested()).not.toContain('/api/auth/me/avatar');
+  });
+
+  it('uploads the cropped image and updates the session and users store', async () => {
     mockRoutes(200, { ...user, avatar_url: '/api/avatars/key-1' });
     // The mocked fetch never drains the request body, and undici cannot read
     // jsdom's FormData anyway, so the sent file is asserted via this spy.
@@ -362,25 +409,50 @@ describe('Account', () => {
     expect(screen.getByRole('button', { name: 'Upload image' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
 
-    const file = new File(['png-bytes'], 'me.png', { type: 'image/png' });
-    await fireEvent.change(screen.getByLabelText('Profile image file'), {
-      target: { files: [file] },
-    });
+    await chooseImage();
+    await cropAndSave();
 
-    try {
-      expect(await screen.findByText('Profile image updated')).toBeInTheDocument();
-      const request = requestTo('/api/auth/me/avatar');
-      expect(request.method).toBe('POST');
-      expect(request.headers.get('Content-Type')).toContain('multipart/form-data');
-      expect(appendSpy).toHaveBeenCalledExactlyOnceWith('file', file);
-      expect(session.user?.avatar_url).toBe('/api/avatars/key-1');
-      expect(users.byId('u-1')?.avatar_url).toBe('/api/avatars/key-1');
-      expect(screen.getByTitle('Ada')).toHaveAttribute('src', '/api/avatars/key-1');
-      expect(screen.getByRole('button', { name: 'Replace image' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Remove image' })).toBeInTheDocument();
-    } finally {
-      appendSpy.mockRestore();
-    }
+    expect(await screen.findByText('Profile image updated')).toBeInTheDocument();
+    const request = requestTo('/api/auth/me/avatar');
+    expect(request.method).toBe('POST');
+    expect(request.headers.get('Content-Type')).toContain('multipart/form-data');
+    // What the canvas produced, not what the file picker handed over.
+    const [field, sent] = appendSpy.mock.calls[0] as [string, File];
+    expect(appendSpy).toHaveBeenCalledOnce();
+    expect(field).toBe('file');
+    expect(sent.name).toBe('avatar.webp');
+    expect(await sent.text()).toBe('cropped-bytes');
+    expect(session.user?.avatar_url).toBe('/api/avatars/key-1');
+    expect(users.byId('u-1')?.avatar_url).toBe('/api/avatars/key-1');
+    expect(screen.getByTitle('Ada')).toHaveAttribute('src', '/api/avatars/key-1');
+    expect(screen.getByRole('button', { name: 'Replace image' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove image' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Crop area' })).toBeNull();
+  });
+
+  it('uploads nothing when the crop is cancelled', async () => {
+    mockRoutes(200, { ...user, avatar_url: '/api/avatars/key-1' });
+    render(Account);
+
+    await chooseImage();
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('group', { name: 'Crop area' })).toBeNull();
+    expect(pathsRequested()).not.toContain('/api/auth/me/avatar');
+    expect(session.user?.avatar_url).toBeNull();
+  });
+
+  it('turns away a file the browser cannot decode before the cropper sees it', async () => {
+    mockRoutes(200, user);
+    render(Account);
+
+    await chooseImage(new File(['%PDF'], 'resume.pdf', { type: 'application/pdf' }));
+
+    expect(
+      await screen.findByText('That file is not a supported image (PNG, JPEG, GIF, or WebP)')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Crop area' })).toBeNull();
+    expect(pathsRequested()).not.toContain('/api/auth/me/avatar');
   });
 
   it('removes the profile image', async () => {
@@ -403,12 +475,15 @@ describe('Account', () => {
     mockRoutes(413, { error: 'payload too large' });
     render(Account);
 
-    const file = new File(['big'], 'big.png', { type: 'image/png' });
-    await fireEvent.change(screen.getByLabelText('Profile image file'), {
-      target: { files: [file] },
-    });
+    await chooseImage(new File(['big'], 'big.png', { type: 'image/png' }));
+    await cropAndSave();
 
-    expect(await screen.findByText('That image is too large (max 10 MB)')).toBeInTheDocument();
+    // Inside the dialog, which is still up: a rejected upload leaves the
+    // adjustment in place to be tried again, and covers the page while it does.
+    expect(await within(cropper()).findByRole('alert')).toHaveTextContent(
+      'That image is too large (max 10 MB)'
+    );
+    expect(screen.getAllByText('That image is too large (max 10 MB)')).toHaveLength(1);
     expect(session.user?.avatar_url).toBeNull();
     expect(screen.getByRole('button', { name: 'Upload image' })).toBeInTheDocument();
   });

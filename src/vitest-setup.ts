@@ -26,6 +26,10 @@ Element.prototype.scrollIntoView ??= () => {};
 Element.prototype.scrollTo ??= () => {};
 Element.prototype.getAnimations ??= () => [];
 
+// Nor pointer capture, which a drag asks for so that a finger leaving the element
+// it started on keeps reporting to it.
+Element.prototype.setPointerCapture ??= () => {};
+
 // jsdom has no layout, so a Range has none of the rect APIs ProseMirror calls
 // while scrolling the caret into view.
 Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
