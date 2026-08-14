@@ -83,6 +83,12 @@
     const short = Math.min(image.width, image.height);
     return { width: image.width / short, height: image.height / short };
   });
+
+  const layout = $derived(
+    `width: ${String(box.width * 100)}%; height: ${String(box.height * 100)}%; ` +
+      `transform: translate(${String((offset.x / box.width) * 100)}%, ${String((offset.y / box.height) * 100)}%) ` +
+      `rotate(${String(rotation)}deg) scale(${String(zoom)})`
+  );
   // Only one of the two can be set: each save clears its own before running, and
   // an upload only happens once a render has succeeded. Neither is shown with no
   // file: a closed <dialog> is still in the page, and a message inside it would
@@ -267,9 +273,7 @@
           alt=""
           draggable="false"
           class="max-w-none shrink-0 object-cover {image === null ? 'opacity-0' : ''}"
-          style="width: {box.width * 100}%; height: {box.height * 100}%;
-                 transform: translate({(offset.x / box.width) * 100}%, {(offset.y / box.height) *
-            100}%) rotate({rotation}deg) scale({zoom})"
+          style={layout}
           onload={loaded}
           onerror={() => (failure = 'That image could not be read.')}
         />

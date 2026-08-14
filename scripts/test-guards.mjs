@@ -1332,4 +1332,34 @@ export const guards = [
     replace: '      afterId: null,\n      beforeId: null,',
     tests: ['src/lib/board.test.ts'],
   },
+  {
+    // Nothing downstream re-checks this: the canvas draws whatever rectangle it
+    // is handed, and a negative origin samples outside the image rather than
+    // failing, so the avatar comes out with a strip of nothing along one edge.
+    name: 'a crop rectangle stays inside the image it was taken from',
+    testName: 'stays inside the rotated image for every rotation, zoom and wild offset',
+    file: 'src/lib/image-crop.ts',
+    find: '    x: inside(width / 2 - view.offset.x * side - side / 2, width),',
+    replace: '    x: width / 2 - view.offset.x * side - side / 2,',
+    tests: ['src/lib/image-crop.test.ts'],
+  },
+  {
+    name: 'a crop is written at its own resolution rather than stretched to the cap',
+    testName: 'writes the crop at its own resolution rather than stretching it',
+    file: 'src/lib/image-crop.ts',
+    find: '  return Math.max(1, Math.min(MAX_OUTPUT_SIZE, Math.round(cropSide(view))));',
+    replace: '  return MAX_OUTPUT_SIZE;',
+    tests: ['src/lib/image-crop.test.ts'],
+  },
+  {
+    // At zoom 1 only the long side can pan, so the axis the pan lives on is the
+    // one a quarter turn swaps: carried across it survives the turn, and left
+    // where it was the clamp discards it and the framing jumps back to centre.
+    name: 'a quarter turn carries the pan onto the axis that can still hold it',
+    testName: 'turns the image a quarter at a time, carrying the pan onto the other axis',
+    file: 'src/components/AvatarCropper.svelte',
+    find: '    setOffset({ x: -offset.y, y: offset.x });',
+    replace: '    setOffset(offset);',
+    tests: ['src/components/AvatarCropper.test.ts'],
+  },
 ];

@@ -58,7 +58,7 @@ const injectAxe = {
   // imports resolved.
   enforce: 'pre',
   transform(code, id) {
-    if (!/scripts\/(board|task-detail)-probe\.ts$/.test(id)) {
+    if (!/scripts\/(board|task-detail|avatar-cropper)-probe\.ts$/.test(id)) {
       return null;
     }
     return `${code}\nimport * as __axe from 'axe-core';\n(window as any).axe = __axe.default ?? __axe;\n`;
@@ -122,8 +122,10 @@ const AUDIT = `(async () => {
   }));
 })()`;
 
-// Screens the gate covers. The board is the app's main surface; the overlay is a
-// native <dialog>, which is where labelling and focus rules actually bite.
+// Screens the gate covers. The board is the app's main surface; the overlay and
+// the cropper are native <dialog>s, which is where labelling and focus rules
+// actually bite — and the cropper's crop surface is the one thing here carrying a
+// role it was given by hand rather than by the element it is.
 const SCREENS = [
   {
     name: 'board',
@@ -142,6 +144,13 @@ const SCREENS = [
   {
     name: 'card overlay',
     page: 'scripts/task-detail-probe.html',
+    width: 1280,
+    height: 900,
+    mobile: false,
+  },
+  {
+    name: 'avatar cropper',
+    page: 'scripts/avatar-cropper-probe.html',
     width: 1280,
     height: 900,
     mobile: false,

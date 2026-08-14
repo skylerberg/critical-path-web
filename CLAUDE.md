@@ -134,7 +134,8 @@ What is worth doing by hand is whatever your change actually touches: the test
 files near it, and the one check that covers the thing you changed if there is
 one — `check:layout:real` after a board layout change, `check:task-detail` after
 touching the card overlay, `check:column-menu` after touching the column kebab or
-`sortColumn`, `check:a11y` after changing markup or a colour token,
+`sortColumn`, `check:avatar-cropper` after touching the cropper or its geometry,
+`check:a11y` after changing markup or a colour token,
 `check:comments` after moving a rule between a comment and this file. Those are
 seconds each.
 
@@ -175,7 +176,8 @@ killed run leaves nothing behind.
 
 Every check that boots vite takes its own port variable and its own default —
 `LAYOUT_PROBE_PORT` 5180, `TASK_DETAIL_PROBE_PORT` 5190, `A11Y_PROBE_PORT` 5200,
-`COLUMN_MENU_PROBE_PORT` 5210 — so moving one cannot move another. They shared a single variable once, which made
+`COLUMN_MENU_PROBE_PORT` 5210, `AVATAR_CROPPER_PROBE_PORT` 5220 — so moving one
+cannot move another. They shared a single variable once, which made
 the documented override a way to land two checks on the same port rather than a
 way to separate them; each header names only its own.
 
@@ -223,6 +225,16 @@ meaning anything, since a slower press would drift past the window into the
 second read's territory, so `board-probe-net.ts` counts reorders it has
 **answered** and the arm requires that count to still be zero.
 
+`check:avatar-cropper` is the only check here that compares two renderings of the
+same thing. It mounts the real `AvatarCropper.svelte` through
+`scripts/avatar-cropper-probe.ts` over a source image of flat colours, then reads
+the same four points twice — out of the file the canvas produced, and out of a
+screenshot of the page — after a pan, a drag and a quarter turn. Neither reading
+is trustworthy alone: `src/lib/image-crop.ts` can be provably right while the CSS
+that lays the image out disagrees with it, which is how a pan once slid the image
+clear of its frame and uncovered the background while the saved file stayed
+correct. Colours are compared by name, since the output is lossy WebP.
+
 `check:comments` is not a browser check and needs nothing installed. It reads the
 prose — comments, plus this file, the README and the skills under `.pi/` — and
 fails on two things a reader takes on trust: the same sentence in two files,
@@ -239,8 +251,8 @@ skill was telling people to run the formatter that the post-commit hook already
 runs, and the README described a generator flag that had changed meaning. Neither
 was anyone's compile error.
 
-`check:a11y` runs axe-core over the real board and the real card overlay, in
-**both colour schemes** — the palette is defined twice and half the tokens exist
+`check:a11y` runs axe-core over the real board, the real card overlay and the real
+avatar cropper, in **both colour schemes** — the palette is defined twice and half the tokens exist
 only under `prefers-color-scheme: dark`, so a light-only run reads none of them.
 It owns a named rule list rather than all of axe, so a new axe release cannot
 turn it red on a rule nobody adopted. Two things it cannot see, which is why the
@@ -249,7 +261,7 @@ resort, so a title-only avatar passes every rule while a bare `<span>` carrying
 one is named nothing at all; and anything behind a hover or a keypress, since it
 audits the resting page.
 
-**All seven also take `--selftest`, and a change to what they assert should run
+**All eight also take `--selftest`, and a change to what they assert should run
 it:**
 
 ```sh
@@ -257,6 +269,7 @@ node scripts/check-board-layout.mjs --selftest
 node scripts/check-board-layout-real.mjs --selftest
 node scripts/check-task-detail.mjs --selftest
 node scripts/check-column-menu.mjs --selftest
+node scripts/check-avatar-cropper.mjs --selftest
 node scripts/check-comments.mjs --selftest
 node scripts/check-a11y.mjs --selftest
 node scripts/check-test-guards.mjs --selftest
@@ -264,25 +277,29 @@ node scripts/check-test-guards.mjs --selftest
 
 Each re-runs its cases against something deliberately put back on the bug —
 legacy markup in the fixture, the pre-fix `dndzone` option in the real board, the
-write queue disabled in the card overlay, a planted duplicate and a planted dead
-reference, the pre-fix dark accent and a column back on `<section>`, the "Sort by"
-row rewritten to dismiss the menu, a sort option rewritten to sort nothing and a
-`sortColumn` stripped of its optimistic order,
+write queue disabled in the card overlay, the cropper's image box back at the
+frame's own size and its display's rotation dropped, a planted duplicate and a
+planted dead reference, the pre-fix dark accent and a column back on `<section>`,
+the "Sort by" row rewritten to dismiss the menu, a sort option rewritten to sort
+nothing and a `sortColumn` stripped of its optimistic order,
 guards whose edit changes nothing, one aimed at a module its tests never load and
 one handed a deadline no real run could meet — and fails if any of them still
 *passes*. The a11y selftest also names the rule it expects,
 because with a dirty baseline any violation would otherwise read as the planted
 one being caught; the column-menu selftest goes further and names the arms each
 planted bug must leave **green**, which is what stops "something went red" from
-passing for "the right thing went red". All seven share a failure mode a unit test mostly does not:
+passing for "the right thing went red" — and the cropper's does the same by
+construction, since both of its planted bugs leave the saved file correct and only
+the display wrong, so the arms reading the output alone stay green. All eight share
+a failure mode a unit test mostly does not:
 measuring nothing and reporting green, because the gesture never armed, the
 selector matched nothing, the option it turns on was renamed out from under it,
 or the pattern it greps for stopped matching the codebase. CI runs the checks
 without the flag; the flag is how you earn the right to believe them. The ones
 that rewrite a source file to plant their bug
-— the real board check, the card-overlay one and the column-menu one — also
-assert they rewrote exactly one call site, since rewriting none is that same
-failure wearing the selftest's face. `check:test-guards` carries that assertion in its own shape: one
+— the real board check, the card-overlay one, the column-menu one and the cropper
+— also assert they rewrote exactly one call site, since rewriting none is that
+same failure wearing the selftest's face. `check:test-guards` carries that assertion in its own shape: one
 of its controls is an unmodified guard that must still come back caught, because
 a transform that has stopped rewriting anything satisfies every control expecting
 a non-catch.

@@ -74,23 +74,23 @@ export function clampOffset(view: CropView): Offset {
 }
 
 /**
- * Always clamped, so the rect is inside the image whatever offset it is handed —
- * the guarantee that a saved avatar can never carry a strip of empty canvas.
+ * Always inside the image, whatever offset it is handed — the guarantee that a
+ * saved avatar can never carry a strip of empty canvas.
  *
- * Clamped twice, and the second one is not redundant: an offset already at its
- * limit still lands a rounding error either side of the edge once it has been
- * multiplied out into pixels, and on the low side that is a source rectangle
- * starting outside the image.
+ * Clamped here in pixels rather than by running the offset through
+ * `clampOffset` first, which reaches the same interval a different way and then
+ * misses by a rounding error: an offset sitting exactly on its limit multiplies
+ * out to a hair either side of the edge, and on the low side that is a source
+ * rectangle starting outside the image.
  */
 export function cropRect(view: CropView): CropRect {
   const { width, height } = rotatedSize(view.image, view.rotation);
   const side = cropSide(view);
-  const offset = clampOffset(view);
   const inside = (position: number, extent: number): number =>
     Math.min(Math.max(0, position), Math.max(0, extent - side));
   return {
-    x: inside(width / 2 - offset.x * side - side / 2, width),
-    y: inside(height / 2 - offset.y * side - side / 2, height),
+    x: inside(width / 2 - view.offset.x * side - side / 2, width),
+    y: inside(height / 2 - view.offset.y * side - side / 2, height),
     side,
   };
 }
