@@ -2,6 +2,7 @@ import { fetchMock, jsonResponse } from '../api/testUtils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import Account from './Account.svelte';
+import { getCroppedBlob, loadImage } from '../lib/cropImage';
 import { projects, type Project } from '../lib/projects.svelte';
 import { realtime } from '../lib/realtime.svelte';
 import { session } from '../lib/session.svelte';
@@ -11,6 +12,14 @@ import { users } from '../lib/users.svelte';
 
 vi.mock('../lib/realtime.svelte', () => ({
   realtime: { connect: vi.fn(), disconnect: vi.fn() },
+}));
+
+// jsdom decodes no image bytes, so the cropper's load and canvas steps are
+// stubbed with the shapes they really return: the echoed URL and dimensions a
+// decode would produce, and a JPEG blob a crop would encode.
+vi.mock('../lib/cropImage', () => ({
+  loadImage: vi.fn(async (url: string) => ({ url, width: 1000, height: 500 })),
+  getCroppedBlob: vi.fn(async () => new Blob(['cropped-bytes'], { type: 'image/jpeg' })),
 }));
 
 // jsdom has no CacheStorage, so the deletion path's cache eviction would
@@ -62,6 +71,14 @@ function mockRoutes(status: number, body?: unknown): void {
     }
     return jsonResponse(status, body);
   });
+}
+
+// jsdom lays nothing out, so the cropper's viewport measures as zero and its
+// Crop button stays disabled; stub a square rect for the tests that confirm one.
+function measureCropper(): void {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+    window.DOMRect.fromRect({ width: 240, height: 240 })
+  );
 }
 
 function requestTo(pathname: string): Request {
@@ -134,6 +151,10 @@ beforeEach(async () => {
   fetchMock.mockReset();
   vi.mocked(realtime.connect).mockClear();
   vi.mocked(realtime.disconnect).mockClear();
+  // Reset rather than clear: a `mockRejectedValueOnce` a broken test never
+  // consumed must not poison the next one's load or crop.
+  vi.mocked(loadImage).mockReset();
+  vi.mocked(getCroppedBlob).mockReset();
   cacheDelete.mockClear();
   users.reset();
   projects.reset();
@@ -352,35 +373,98 @@ describe('Account', () => {
     ]);
   });
 
-  it('uploads a profile image and updates the session and users store', async () => {
+  it('crops the selected image and uploads it, updating the session and users store', async () => {
     mockRoutes(200, { ...user, avatar_url: '/api/avatars/key-1' });
+    measureCropper();
     // The mocked fetch never drains the request body, and undici cannot read
     // jsdom's FormData anyway, so the sent file is asserted via this spy.
     const appendSpy = vi.spyOn(FormData.prototype, 'append');
     render(Account);
-
-    expect(screen.getByRole('button', { name: 'Upload image' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Remove image' })).not.toBeInTheDocument();
 
     const file = new File(['png-bytes'], 'me.png', { type: 'image/png' });
     await fireEvent.change(screen.getByLabelText('Profile image file'), {
       target: { files: [file] },
     });
 
+    // Selecting a file opens the cropper instead of uploading straight away.
+    await screen.findByRole('button', { name: 'Crop' });
+    expect(pathsRequested()).not.toContain('/api/auth/me/avatar');
+    await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
+
     try {
       expect(await screen.findByText('Profile image updated')).toBeInTheDocument();
       const request = requestTo('/api/auth/me/avatar');
       expect(request.method).toBe('POST');
       expect(request.headers.get('Content-Type')).toContain('multipart/form-data');
-      expect(appendSpy).toHaveBeenCalledExactlyOnceWith('file', file);
+      expect(appendSpy).toHaveBeenCalledExactlyOnceWith('file', expect.any(File));
+      const sent = appendSpy.mock.calls[0][1] as File;
+      expect(sent.name).toBe('avatar.jpg');
+      expect(sent.type).toBe('image/jpeg');
+      expect(vi.mocked(getCroppedBlob)).toHaveBeenCalledExactlyOnceWith(
+        'blob:fake-url',
+        expect.objectContaining({ size: expect.any(Number) }),
+        0
+      );
       expect(session.user?.avatar_url).toBe('/api/avatars/key-1');
       expect(users.byId('u-1')?.avatar_url).toBe('/api/avatars/key-1');
       expect(screen.getByTitle('Ada')).toHaveAttribute('src', '/api/avatars/key-1');
       expect(screen.getByRole('button', { name: 'Replace image' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Remove image' })).toBeInTheDocument();
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake-url');
     } finally {
       appendSpy.mockRestore();
     }
+  });
+
+  it('closes the cropper without uploading when cancelled', async () => {
+    mockRoutes(200, user);
+    render(Account);
+
+    const file = new File(['png-bytes'], 'me.png', { type: 'image/png' });
+    await fireEvent.change(screen.getByLabelText('Profile image file'), {
+      target: { files: [file] },
+    });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(await screen.findByRole('button', { name: 'Upload image' })).toBeInTheDocument();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake-url');
+    expect(pathsRequested()).not.toContain('/api/auth/me/avatar');
+    expect(vi.mocked(getCroppedBlob)).not.toHaveBeenCalled();
+  });
+
+  it('reports an unreadable file and never opens the cropper', async () => {
+    mockRoutes(200, user);
+    vi.mocked(loadImage).mockRejectedValueOnce(new Error('Image failed to load'));
+    render(Account);
+
+    const file = new File(['not-an-image'], 'me.png', { type: 'image/png' });
+    await fireEvent.change(screen.getByLabelText('Profile image file'), {
+      target: { files: [file] },
+    });
+
+    expect(await screen.findByText('That file could not be read as an image.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crop' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upload image' })).toBeInTheDocument();
+    expect(pathsRequested()).not.toContain('/api/auth/me/avatar');
+  });
+
+  it('keeps the cropper open when the crop itself fails', async () => {
+    mockRoutes(200, user);
+    measureCropper();
+    vi.mocked(getCroppedBlob).mockRejectedValueOnce(new Error('canvas refused'));
+    render(Account);
+
+    const file = new File(['png-bytes'], 'me.png', { type: 'image/png' });
+    await fireEvent.change(screen.getByLabelText('Profile image file'), {
+      target: { files: [file] },
+    });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Crop' }));
+
+    expect(
+      await screen.findByText('That image could not be cropped — try another file.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crop' })).toBeInTheDocument();
+    expect(pathsRequested()).not.toContain('/api/auth/me/avatar');
   });
 
   it('removes the profile image', async () => {
@@ -399,17 +483,36 @@ describe('Account', () => {
     expect(screen.getByRole('button', { name: 'Upload image' })).toBeInTheDocument();
   });
 
-  it('shows a friendly error when the image is too large and keeps the avatar state', async () => {
+  it('shows a friendly error when the upload is refused as too large', async () => {
     mockRoutes(413, { error: 'payload too large' });
+    measureCropper();
     render(Account);
 
-    const file = new File(['big'], 'big.png', { type: 'image/png' });
+    const file = new File(['png-bytes'], 'big.png', { type: 'image/png' });
+    await fireEvent.change(screen.getByLabelText('Profile image file'), {
+      target: { files: [file] },
+    });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Crop' }));
+
+    expect(await screen.findByText('That image is too large (max 10 MB)')).toBeInTheDocument();
+    expect(session.user?.avatar_url).toBeNull();
+    // The framing survives a rejected upload, so retry costs one click.
+    expect(screen.getByRole('button', { name: 'Crop' })).toBeInTheDocument();
+  });
+
+  it('refuses an oversized file before loading it', async () => {
+    mockRoutes(200, user);
+    render(Account);
+
+    const file = new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'big.png', {
+      type: 'image/png',
+    });
     await fireEvent.change(screen.getByLabelText('Profile image file'), {
       target: { files: [file] },
     });
 
-    expect(await screen.findByText('That image is too large (max 10 MB)')).toBeInTheDocument();
-    expect(session.user?.avatar_url).toBeNull();
+    expect(await screen.findByText('That image is too large (max 10 MB).')).toBeInTheDocument();
+    expect(vi.mocked(loadImage)).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Upload image' })).toBeInTheDocument();
   });
 

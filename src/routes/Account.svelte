@@ -1,12 +1,15 @@
 <script lang="ts">
   import { api, ApiError, assertOk } from '../api/client';
   import { apiMessage } from '../lib/apiMessages';
+  import { getCroppedBlob, loadImage } from '../lib/cropImage';
+  import type { CropRect, LoadedImage } from '../lib/cropImage';
   import { downloadAccountExport } from '../lib/export';
   import { projects } from '../lib/projects.svelte';
   import { link } from '../lib/router.svelte';
   import { projectHref } from '../lib/short-links';
   import { session } from '../lib/session.svelte';
   import { users } from '../lib/users.svelte';
+  import AvatarCropper from '../components/AvatarCropper.svelte';
   import DeleteAccountDialog from '../components/DeleteAccountDialog.svelte';
   import FeedbackDialog from '../components/FeedbackDialog.svelte';
   import NotificationSettings from '../components/NotificationSettings.svelte';
@@ -26,6 +29,9 @@
   let avatarInput = $state<HTMLInputElement | null>(null);
   let avatarStatus = $state<Status>(null);
   let savingAvatar = $state(false);
+  /** The image awaiting a crop, shown in the cropper until confirmed or
+   * cancelled. Holds the object URL so it can be revoked on the way out. */
+  let cropSource = $state<LoadedImage | null>(null);
 
   let email = $state(session.user?.email ?? '');
   let emailStatus = $state<Status>(null);
@@ -73,7 +79,7 @@
     }
   }
 
-  async function uploadAvatar(event: Event): Promise<void> {
+  async function selectAvatar(event: Event): Promise<void> {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
@@ -84,9 +90,30 @@
       avatarStatus = { kind: 'error', message: 'That image is too large (max 10 MB).' };
       return;
     }
+    avatarStatus = null;
+    // The API sniffs magic bytes and re-encodes server-side, so the client only
+    // checks what it must before decoding: size here, decodability in loadImage.
+    const url = URL.createObjectURL(file);
+    try {
+      cropSource = await loadImage(url);
+    } catch {
+      URL.revokeObjectURL(url);
+      avatarStatus = { kind: 'error', message: 'That file could not be read as an image.' };
+    }
+  }
+
+  function cancelCrop(): void {
+    if (cropSource !== null) URL.revokeObjectURL(cropSource.url);
+    cropSource = null;
+  }
+
+  async function confirmAvatarCrop(rect: CropRect, rotation: number): Promise<void> {
+    if (cropSource === null || savingAvatar) return;
     savingAvatar = true;
     avatarStatus = null;
     try {
+      const blob = await getCroppedBlob(cropSource.url, rect, rotation);
+      const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
       const user = assertOk(
         await api.POST('/api/auth/me/avatar', {
           body: { file: file as unknown as string },
@@ -99,9 +126,15 @@
       );
       session.user = user;
       users.upsert(user);
+      cancelCrop();
       avatarStatus = { kind: 'success', message: 'Profile image updated' };
     } catch (error) {
-      avatarStatus = { kind: 'error', message: avatarMessageFor(error) };
+      avatarStatus =
+        error instanceof ApiError
+          ? { kind: 'error', message: avatarMessageFor(error) }
+          : { kind: 'error', message: 'That image could not be cropped — try another file.' };
+      // A failed upload leaves the cropper open with the framing intact, so a
+      // transient failure costs a retry rather than the user's positioning.
     } finally {
       savingAvatar = false;
     }
@@ -254,19 +287,30 @@
 
   <section class="flex flex-col gap-3 rounded-lg border border-edge bg-surface p-6">
     <h2 class="text-lg font-semibold">Profile image</h2>
-    <div class="flex items-center gap-4">
-      <Avatar name={session.user?.name ?? ''} src={session.user?.avatar_url} size="lg" />
-      <div class="flex flex-wrap gap-2">
-        <Button variant="secondary" disabled={savingAvatar} onclick={() => avatarInput?.click()}>
-          {savingAvatar ? 'Saving…' : session.user?.avatar_url ? 'Replace image' : 'Upload image'}
-        </Button>
-        {#if session.user?.avatar_url}
-          <Button variant="secondary" disabled={savingAvatar} onclick={removeAvatar}>
-            Remove image
+    {#if cropSource !== null}
+      <AvatarCropper
+        src={cropSource.url}
+        width={cropSource.width}
+        height={cropSource.height}
+        saving={savingAvatar}
+        onconfirm={confirmAvatarCrop}
+        oncancel={cancelCrop}
+      />
+    {:else}
+      <div class="flex items-center gap-4">
+        <Avatar name={session.user?.name ?? ''} src={session.user?.avatar_url} size="lg" />
+        <div class="flex flex-wrap gap-2">
+          <Button variant="secondary" disabled={savingAvatar} onclick={() => avatarInput?.click()}>
+            {savingAvatar ? 'Saving…' : session.user?.avatar_url ? 'Replace image' : 'Upload image'}
           </Button>
-        {/if}
+          {#if session.user?.avatar_url}
+            <Button variant="secondary" disabled={savingAvatar} onclick={removeAvatar}>
+              Remove image
+            </Button>
+          {/if}
+        </div>
       </div>
-    </div>
+    {/if}
     {@render status(avatarStatus)}
     <input
       bind:this={avatarInput}
@@ -274,7 +318,7 @@
       accept="image/png,image/jpeg,image/gif,image/webp"
       aria-label="Profile image file"
       class="hidden"
-      onchange={uploadAvatar}
+      onchange={selectAvatar}
     />
   </section>
 

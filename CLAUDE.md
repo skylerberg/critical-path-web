@@ -139,7 +139,8 @@ free port at or above 5180 and mounts the real `Board.svelte` through
 killed run leaves nothing behind.
 
 Every check that boots vite takes its own port variable and its own default —
-`LAYOUT_PROBE_PORT` 5180, `TASK_DETAIL_PROBE_PORT` 5190, `A11Y_PROBE_PORT` 5200 —
+`LAYOUT_PROBE_PORT` 5180, `TASK_DETAIL_PROBE_PORT` 5190, `A11Y_PROBE_PORT` 5200,
+`AVATAR_CROPPER_PROBE_PORT` 5220 —
 so moving one cannot move another. They shared a single variable once, which made
 the documented override a way to land two checks on the same port rather than a
 way to separate them; each header names only its own.
@@ -182,13 +183,24 @@ resort, so a title-only avatar passes every rule while a bare `<span>` carrying
 one is named nothing at all; and anything behind a hover or a keypress, since it
 audits the resting page.
 
-**All six also take `--selftest`, and a change to what they assert should run
+`check:avatar-cropper` is the same shape again, around the account page's avatar
+cropper. The cropper's correctness is almost entirely things jsdom cannot see:
+the preview is an `<img>` whose inline size the stylesheet's reset clamps back
+into its container, and the unit tests assert the transform string, which stays
+correct while the preview on screen is squeezed. The check mounts the real
+component over a synthetic image whose gradients make a coordinate error
+legible as a number, drives drag, wheel, pinch and the zoom slider, and decodes
+the cropped JPEG to compare its pixels against the source region the viewport
+was showing — rotation included.
+
+**All seven also take `--selftest`, and a change to what they assert should run
 it:**
 
 ```sh
 node scripts/check-board-layout.mjs --selftest
 node scripts/check-board-layout-real.mjs --selftest
 node scripts/check-task-detail.mjs --selftest
+node scripts/check-avatar-cropper.mjs --selftest
 node scripts/check-comments.mjs --selftest
 node scripts/check-a11y.mjs --selftest
 node scripts/check-test-guards.mjs --selftest
