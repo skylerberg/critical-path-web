@@ -20,6 +20,8 @@ pnpm test src/lib/board.test.ts    # a file or a directory; seconds
 pnpm run check                       # svelte-check, after a type or API change
 pnpm run check:layout:real           # after a board layout change
 pnpm run check:task-detail           # after touching the card overlay
+pnpm run check:column-menu           # after touching the column kebab or sortColumn
+pnpm run check:avatar-cropper        # after touching the avatar cropper
 pnpm run check:a11y                  # after changing markup or a colour token
 pnpm run check:comments              # after moving a rule between a comment and a doc
 ```
@@ -35,9 +37,9 @@ Then push and read the CI run.
 - The browser checks need `pnpm run playwright:install` once locally. They skip
   with a warning if Chromium is missing; in CI a launch failure throws instead.
 - Each of `check:layout`, `check:layout:real`, `check:task-detail`,
-  `check:comments` and `check:a11y` takes `--selftest`, which re-runs its cases
-  against something deliberately put back on the bug. Run it after changing what
-  one asserts.
+  `check:column-menu`, `check:avatar-cropper`, `check:comments` and `check:a11y`
+  takes `--selftest`, which re-runs its cases against something deliberately put
+  back on the bug. Run it after changing what one asserts.
 - Tests are colocated (`src/**/*.test.ts`) and mount components because
   `svelteTesting()` is wired in `vite.config.ts` — do not remove it.
 - A stale `src/api/api.generated.ts` fails only under `pnpm run check`, never
