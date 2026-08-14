@@ -5,9 +5,9 @@
 #
 # No `packages:` key, so the root is the only member. This repo has no nested packages.
 
-# strictDepBuilds fails the install on any dependency whose install scripts have not
-# been ruled on, so a denial has to be written down rather than left out. Exact names
-# and name@range only; a glob is an error.
+# One entry, and it has to be spelled out: strictDepBuilds refuses to install while any
+# dependency's install scripts are unruled, and `es*` buys nothing because a glob is
+# not rejected — it just matches nothing.
 allowBuilds:
   unrs-resolver: true # eslint-plugin-import-x's resolver; prebuilt binary
 
@@ -21,7 +21,17 @@ catalog:
 overrides:
   openapi-typescript>typescript: 'catalog:'
 
-# Default is `install`, which silently installs on any `pnpm run`/`pnpm exec` when
-# node_modules looks stale — a rebase that moved package.json, most often. Fail loudly
-# instead. The api repo has to leave this off; its own file says why.
-verifyDepsBeforeRun: error
+# Off. The idea — fail loudly when node_modules is stale rather than install behind
+# your back — does not survive this repo, and the failure it produces is a hard error
+# with nothing actually wrong. Under `CI` pnpm computes a different
+# `enableGlobalVirtualStore` default than an install without it recorded, so every
+# CI-flagged child dies:
+#
+#   $ pnpm exec node -e 'console.log(1)'        → 1
+#   $ CI=1 pnpm exec node -e 'console.log(1)'   → ERR_PNPM_VERIFY_DEPS_BEFORE_RUN
+#
+# check-test-guards.mjs spawns all 33 children with CI=1, which took the guard suite
+# from 33 caught bugs to 33 RUN-FAILED — a runner that can no longer tell a guard that
+# bites from one that does not. `pnpm install` does not clear it. The api repo has a
+# second, unrelated trigger; its root file records that one.
+verifyDepsBeforeRun: false

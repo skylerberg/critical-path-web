@@ -16,7 +16,7 @@ a production build, and CI runs it on every push anyway. Run what covers your
 change:
 
 ```sh
-ppnpm test src/lib/board.test.ts   # a file or a directory; seconds
+pnpm test src/lib/board.test.ts    # a file or a directory; seconds
 pnpm run check                       # svelte-check, after a type or API change
 pnpm run check:layout:real           # after a board layout change
 pnpm run check:task-detail           # after touching the card overlay

@@ -25,12 +25,10 @@ Two behaviours that differ from npm and have already cost time:
   Write `pnpm test src/lib/board.test.ts`. The api's CI shards were the same bug
   with a worse ending — four shards, each quietly running everything, all green.
 - **A dependency may not run install scripts unless `allowBuilds` says so**
-  (`strictDepBuilds`), and a denial has to be written down rather than left out.
-  Adding a dependency that builds means adding it there in the same commit, or
-  the install fails for everyone.
-
-pnpm also refuses to resolve a package published in the last day
-(`minimumReleaseAge`), which only shows up when adding a same-day release.
+  (`strictDepBuilds`), and a denial has to be written down rather than left out —
+  an omission and a glob both match nothing. Adding a dependency that builds means
+  adding it there in the same commit, or the install fails for everyone, after
+  appending the name to that file as `set this to true or false` on its way out.
 
 ## Companion repository
 
@@ -162,7 +160,7 @@ so `pnpm run format:check` is only meaningful on a committed tree. Failing it on
 uncommitted edits means nothing has fixed them yet, not that something is wrong —
 commit, and it resolves itself. `format:check` stays in the gate and in CI because
 that is the assertion that the hook actually ran. The same goes for an import-order
-error out of `npm run lint` mid-edit: it is the unfixed state, not a decision
+error out of `pnpm run lint` mid-edit: it is the unfixed state, not a decision
 waiting on you.
 
 The two layout checks are different tiers, and which one you are reading matters
@@ -261,8 +259,8 @@ Nothing is written to the source tree. Each guard is one spawned `vitest` child
 carrying its edit in the environment, applied by `guardMutation()` in
 `vite.config.ts` as the module is transformed — so a run is invisible to whatever
 else is reading those files and cannot leave a bug behind. That is what put the
-full mutating run in `check:all`: cost was never what kept it out — twelve guards
-take about fifteen seconds, four children at a time — the in-place write was.
+full mutating run in `check:all`: cost was never what kept it out — the guards
+take under two minutes, four children at a time — the in-place write was.
 `check:test-guards:anchors` is still worth running mid-refactor because it is
 sub-second, but it is no longer what CI proves — it checks that every `find`
 still resolves and stops there, which cannot tell a guard that catches its bug
