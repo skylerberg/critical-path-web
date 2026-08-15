@@ -1355,6 +1355,17 @@ export const guards = [
     // At zoom 1 only the long side can pan, so the axis the pan lives on is the
     // one a quarter turn swaps: carried across it survives the turn, and left
     // where it was the clamp discards it and the framing jumps back to centre.
+    // A pinch that only zooms looks right in isolation and is wrong in the hand:
+    // the framing slides out from under two fingers that are travelling, and
+    // getting it back means letting go and dragging.
+    name: 'a pinch carries the image with the fingers as well as zooming',
+    testName: 'pinches to zoom and carries the image with the fingers',
+    file: 'src/components/AvatarCropper.svelte',
+    find: '        x: pinch.offset.x + (centre.x - pinch.x) / size,',
+    replace: '        x: pinch.offset.x,',
+    tests: ['src/components/AvatarCropper.test.ts'],
+  },
+  {
     name: 'a quarter turn carries the pan onto the axis that can still hold it',
     testName: 'turns the image a quarter at a time, carrying the pan onto the other axis',
     file: 'src/components/AvatarCropper.svelte',

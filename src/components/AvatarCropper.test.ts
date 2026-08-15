@@ -87,6 +87,26 @@ async function dragBy(x: number, y: number): Promise<void> {
   await fireEvent.pointerUp(surface, { pointerId: 1, clientX: 100 + x, clientY: 100 + y });
 }
 
+/** Two fingers, spread by `spread` px and carried by `travel` px, in one gesture. */
+async function pinchBy(spread: number, travel: number): Promise<void> {
+  const surface = frame();
+  const [left, right] = [100, 200];
+  await fireEvent.pointerDown(surface, { pointerId: 1, clientX: left, clientY: 100 });
+  await fireEvent.pointerDown(surface, { pointerId: 2, clientX: right, clientY: 100 });
+  await fireEvent.pointerMove(surface, {
+    pointerId: 1,
+    clientX: left - spread / 2 + travel,
+    clientY: 100,
+  });
+  await fireEvent.pointerMove(surface, {
+    pointerId: 2,
+    clientX: right + spread / 2 + travel,
+    clientY: 100,
+  });
+  await fireEvent.pointerUp(surface, { pointerId: 1 });
+  await fireEvent.pointerUp(surface, { pointerId: 2 });
+}
+
 function slider(): HTMLInputElement {
   return screen.getByRole('slider', { name: 'Zoom' });
 }
@@ -196,6 +216,18 @@ describe('AvatarCropper', () => {
     expect(shown(container)).toMatchObject({ rotation: 90, x: 0, y: 50 });
   });
 
+  it('pinches to zoom and carries the image with the fingers', async () => {
+    const { container } = open();
+    await loads(container);
+
+    // 100px apart, spread to 200: twice the zoom. The midpoint travels 30px
+    // right, which is a tenth of the frame.
+    await pinchBy(100, 30);
+
+    expect(shown(container).zoom).toBeCloseTo(2);
+    expect(shown(container).x).toBeCloseTo(10);
+  });
+
   it('pans by keyboard for anyone not dragging', async () => {
     const { container } = open();
     await loads(container);
@@ -204,6 +236,10 @@ describe('AvatarCropper', () => {
     await fireEvent.keyDown(frame(), { key: 'ArrowLeft' });
     await fireEvent.keyDown(frame(), { key: 'ArrowLeft' });
     expect(shown(container).x).toBeCloseTo(-10);
+
+    // Shift is the coarse step: one press covers four of the plain ones.
+    await fireEvent.keyDown(frame(), { key: 'ArrowRight', shiftKey: true });
+    expect(shown(container).x).toBeCloseTo(10);
 
     await fireEvent.keyDown(frame(), { key: '+' });
     expect(shown(container).zoom).toBeCloseTo(1.1);

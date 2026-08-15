@@ -35,7 +35,13 @@ export interface CropRect {
 }
 
 export const MIN_ZOOM = 1;
-export const MAX_ZOOM = 3;
+/**
+ * Deep enough to take one face out of a group photo. There is no upscaling to
+ * pay for it: past the point where the crop is smaller than the avatar is shown
+ * at, the zoom is spending real detail, and `outputSize` writes what is left
+ * rather than stretching it back up.
+ */
+export const MAX_ZOOM = 8;
 
 /** The API auto-orients, fits to 1024x1024 and re-encodes, so sending more pixels only costs upload. */
 export const MAX_OUTPUT_SIZE = 1024;

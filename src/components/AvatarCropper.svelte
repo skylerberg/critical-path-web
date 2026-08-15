@@ -48,7 +48,7 @@
   // that just wrote it, and nothing renders from it.
   let pointers: { id: number; x: number; y: number }[] = [];
   let drag: { x: number; y: number; offset: Offset } | null = null;
-  let pinch: { distance: number; zoom: number } | null = null;
+  let pinch: { distance: number; zoom: number; x: number; y: number; offset: Offset } | null = null;
 
   $effect(() => {
     const chosen = file;
@@ -84,10 +84,13 @@
     return { width: image.width / short, height: image.height / short };
   });
 
+  // Built one piece per thing it does, which is also what lets the browser check
+  // put a single one of them back on its bug.
   const layout = $derived(
     `width: ${String(box.width * 100)}%; height: ${String(box.height * 100)}%; ` +
       `transform: translate(${String((offset.x / box.width) * 100)}%, ${String((offset.y / box.height) * 100)}%) ` +
-      `rotate(${String(rotation)}deg) scale(${String(zoom)})`
+      `rotate(${String(rotation)}deg) ` +
+      `scale(${String(zoom)})`
   );
   // Only one of the two can be set: each save clears its own before running, and
   // an upload only happens once a render has succeeded. Neither is shown with no
@@ -141,6 +144,13 @@
     return Math.hypot(first.x - second.x, first.y - second.y);
   }
 
+  /** The point two fingers are pinching about, which is also the point they carry. */
+  function midpoint(): { x: number; y: number } {
+    const [first, second] = pointers;
+    if (first === undefined || second === undefined) return { x: 0, y: 0 };
+    return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+  }
+
   function pointerDown(event: PointerEvent): void {
     if (!ready) return;
     frameElement?.setPointerCapture(event.pointerId);
@@ -149,7 +159,7 @@
     }
     if (pointers.length === 2) {
       drag = null;
-      pinch = { distance: separation(), zoom };
+      pinch = { distance: separation(), zoom, ...midpoint(), offset };
     } else if (pointers.length === 1) {
       drag = { x: event.clientX, y: event.clientY, offset };
     }
@@ -158,14 +168,22 @@
   function pointerMove(event: PointerEvent): void {
     if (!track(event)) return;
     event.preventDefault();
+    const size = frameSize();
+    if (size === 0) return;
     if (pinch !== null && pointers.length >= 2) {
       const distance = separation();
       if (pinch.distance > 0 && distance > 0) setZoom((pinch.zoom * distance) / pinch.distance);
+      // Two fingers pan as well as zoom: a pinch that also travels is one
+      // gesture, and holding the image still under it means the hand has to let
+      // go and drag before the framing can follow.
+      const centre = midpoint();
+      setOffset({
+        x: pinch.offset.x + (centre.x - pinch.x) / size,
+        y: pinch.offset.y + (centre.y - pinch.y) / size,
+      });
       return;
     }
     if (drag === null) return;
-    const size = frameSize();
-    if (size === 0) return;
     setOffset({
       x: drag.offset.x + (event.clientX - drag.x) / size,
       y: drag.offset.y + (event.clientY - drag.y) / size,
@@ -190,20 +208,23 @@
 
   function keydown(event: KeyboardEvent): void {
     if (!ready) return;
+    // Shift is the coarse step, so crossing a large image by keyboard is a few
+    // presses rather than twenty.
+    const step = event.shiftKey ? PAN_STEP * 4 : PAN_STEP;
     switch (event.key) {
       // The image moves the way the arrow points, which is the direction a drag
       // that way would have taken it.
       case 'ArrowLeft':
-        setOffset({ x: offset.x - PAN_STEP, y: offset.y });
+        setOffset({ x: offset.x - step, y: offset.y });
         break;
       case 'ArrowRight':
-        setOffset({ x: offset.x + PAN_STEP, y: offset.y });
+        setOffset({ x: offset.x + step, y: offset.y });
         break;
       case 'ArrowUp':
-        setOffset({ x: offset.x, y: offset.y - PAN_STEP });
+        setOffset({ x: offset.x, y: offset.y - step });
         break;
       case 'ArrowDown':
-        setOffset({ x: offset.x, y: offset.y + PAN_STEP });
+        setOffset({ x: offset.x, y: offset.y + step });
         break;
       case '+':
       case '=':
@@ -303,8 +324,7 @@
       </svg>
     </Button>
     <label class="flex flex-1 items-center gap-2 text-sm text-muted">
-      <span class="sr-only">Zoom</span>
-      <span aria-hidden="true">−</span>
+      Zoom
       <input
         type="range"
         min={MIN_ZOOM}
@@ -312,10 +332,10 @@
         step="0.01"
         value={zoom}
         disabled={!ready}
+        aria-valuetext="{Math.round(zoom * 100)}%"
         class="focus-ring h-11 min-w-0 flex-1 accent-accent"
         oninput={(event) => setZoom(event.currentTarget.valueAsNumber)}
       />
-      <span aria-hidden="true">+</span>
     </label>
   </div>
 

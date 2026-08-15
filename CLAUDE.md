@@ -227,13 +227,14 @@ second read's territory, so `board-probe-net.ts` counts reorders it has
 
 `check:avatar-cropper` is the only check here that compares two renderings of the
 same thing. It mounts the real `AvatarCropper.svelte` through
-`scripts/avatar-cropper-probe.ts` over a source image of flat colours, then reads
-the same four points twice — out of the file the canvas produced, and out of a
-screenshot of the page — after a pan, a drag and a quarter turn. Neither reading
-is trustworthy alone: `src/lib/image-crop.ts` can be provably right while the CSS
-that lays the image out disagrees with it, which is how a pan once slid the image
-clear of its frame and uncovered the background while the saved file stayed
-correct. Colours are compared by name, since the output is lossy WebP.
+`scripts/avatar-cropper-probe.ts` over a source image of flat colours and grades
+it twice over: first by measuring where a drag, a wheel, a pinch and the slider
+actually put the image against its frame, then by saving a crop and reading the
+same four points out of the file and out of a screenshot of the page. Neither
+tier is enough alone — `src/lib/image-crop.ts` can be provably right while the
+CSS that lays the image out disagrees with it, which is how a pan once slid the
+image clear of its frame and uncovered the background while the saved file stayed
+correct. Its header says which tier answers what.
 
 `check:comments` is not a browser check and needs nothing installed. It reads the
 prose — comments, plus this file, the README and the skills under `.pi/` — and

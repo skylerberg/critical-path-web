@@ -62,9 +62,34 @@ async function sample(image: CanvasImageSource, points: [number, number][]): Pro
   );
 }
 
+function frameElement(): Element {
+  return document.querySelector('[role="group"]')!;
+}
+
+function pointerAt(id: number, x: number, y: number, type = 'pointermove'): void {
+  frameElement().dispatchEvent(
+    new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true })
+  );
+}
+
 const api = {
-  frame: () => document.querySelector('[role="group"]')!.getBoundingClientRect().toJSON(),
+  frame: () => frameElement().getBoundingClientRect().toJSON(),
   ready: () => document.querySelector('img')?.naturalWidth === SOURCE.width,
+  /**
+   * Where the image is actually drawn, against the frame it is drawn in — the
+   * measurement the transform is written to produce, and the one jsdom reports
+   * as zero because it lays nothing out.
+   */
+  geometry(): { frame: number; width: number; dx: number; dy: number } {
+    const frame = frameElement().getBoundingClientRect();
+    const image = document.querySelector('[role="group"] img')!.getBoundingClientRect();
+    return {
+      frame: frame.width,
+      width: image.width,
+      dx: image.left + image.width / 2 - (frame.left + frame.width / 2),
+      dy: image.top + image.height / 2 - (frame.top + frame.height / 2),
+    };
+  },
   saved: () => saved !== null,
   clear: () => {
     saved = null;
@@ -97,14 +122,30 @@ const api = {
    */
   drag(from: [number, number], to: [number, number]): void {
     Element.prototype.setPointerCapture = () => {};
-    const frame = document.querySelector('[role="group"]')!;
-    const at = (type: string, [x, y]: [number, number]) =>
-      frame.dispatchEvent(
-        new PointerEvent(type, { pointerId: 1, clientX: x, clientY: y, bubbles: true })
-      );
-    at('pointerdown', from);
-    at('pointermove', to);
-    at('pointerup', to);
+    pointerAt(1, from[0], from[1], 'pointerdown');
+    pointerAt(1, to[0], to[1]);
+    pointerAt(1, to[0], to[1], 'pointerup');
+  },
+  /** Two fingers `apart` px either side of `centre`, spread to `to` and carried by `travel`. */
+  pinch(centre: [number, number], apart: number, to: number, travel: number): void {
+    Element.prototype.setPointerCapture = () => {};
+    const [x, y] = centre;
+    pointerAt(1, x - apart / 2, y, 'pointerdown');
+    pointerAt(2, x + apart / 2, y, 'pointerdown');
+    pointerAt(1, x - to / 2 + travel, y);
+    pointerAt(2, x + to / 2 + travel, y);
+    pointerAt(1, x - to / 2 + travel, y, 'pointerup');
+    pointerAt(2, x + to / 2 + travel, y, 'pointerup');
+  },
+  wheel(deltaY: number): void {
+    frameElement().dispatchEvent(
+      new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true })
+    );
+  },
+  zoomTo(value: number): void {
+    const slider = document.querySelector<HTMLInputElement>('input[type="range"]')!;
+    slider.value = String(value);
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
   },
 };
 
